@@ -1,0 +1,36 @@
+/* admin_demo_business.css：业务结果闭环模块的局部样式，复用现有 .card/.tbl/.btn/.fld */
+.db-chip{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;line-height:18px;border:1px solid transparent;white-space:nowrap}
+.db-chip.ok{background:rgba(16,185,129,.12);color:#047857;border-color:rgba(16,185,129,.25)}
+.db-chip.warn{background:rgba(245,158,11,.12);color:#b45309;border-color:rgba(245,158,11,.25)}
+.db-chip.mut{background:rgba(107,114,128,.12);color:#4b5563;border-color:rgba(107,114,128,.25)}
+.db-read dd{white-space:pre-wrap;word-break:break-word}
+.db-screen{grid-template-columns:minmax(0,1fr);align-items:start}
+.db-screen .card{min-width:0}
+.db-order-sections{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;min-width:0}
+.db-timeline{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.db-timeline li{border-left:2px solid #e5e7eb;padding:2px 0 4px 12px}
+.db-tl-hd{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline}
+.db-tl-hd time{color:#6b7280;font-size:12px}
+.db-hist{border:1px solid #e5e7eb;border-radius:8px;padding:8px 10px}
+.db-hist-hd{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:13px}
+.db-hist-hd span{color:#6b7280;font-size:12px}
+.db-hist-bd{color:#374151;margin-top:4px;white-space:pre-wrap}
+.db-line{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px dashed #e5e7eb}
+.db-line:last-child{border-bottom:0}
+.db-badge{display:inline-block;padding:1px 8px;border-radius:6px;background:#eef2ff;color:#4338ca;font-size:12px}
+.db-kpis{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+.db-kpi-n{font-size:24px;font-weight:700;color:#111827}
+.db-mini{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0}
+.db-mini dt{color:#6b7280;font-size:12px}
+.db-mini dd{margin:2px 0 0;font-size:18px;font-weight:600;color:#111827}
+.db-todo{grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.db-todo-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.db-hl{background:rgba(245,158,11,.08)}
+.db-note{color:#6b7280;font-size:12px}
+@media (min-width:980px){
+  .db-screen{grid-template-columns:minmax(0,1fr) minmax(280px,340px)}
+  .db-order-sections{grid-column:1}
+}
+@media (max-width:640px){
+  .db-mini{grid-template-columns:1fr}
+}

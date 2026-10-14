@@ -1,0 +1,25 @@
+/* 配置扩展独立样式，不覆盖既有编辑器布局。 */
+.cfg-ops-layout { display: grid; gap: 18px; }
+.cfg-ops-section { overflow: hidden; }
+.cfg-ops-section h2 { margin: 0; font-size: 15px; }
+.cfg-ops-caption { margin: 7px 0 0; color: var(--muted-foreground, #71717a); font-size: 12px; line-height: 1.7; }
+.cfg-ops-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 15px 20px; border-top: 1px solid var(--border, #e4e4e7); }
+.cfg-ops-row h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.cfg-ops-row p { margin: 5px 0 0; color: var(--muted-foreground, #71717a); font-size: 12px; line-height: 1.7; }
+.cfg-ops-row > .btn { flex: 0 0 auto; }
+.cfg-ops-export-info { margin-top: 16px; border-top: 1px solid var(--border, #e4e4e7); padding: 16px 2px; font-size: 13px; line-height: 1.8; }
+.cfg-ops-export-info h2 { margin: 0; font-size: 15px; }
+.cfg-ops-export-info p, .cfg-ops-export p { margin: 8px 0; }
+.cfg-ops-export { font-size: 13px; line-height: 1.75; min-width: 0; }
+.cfg-ops-export details { margin: 12px 0; }
+.cfg-ops-export summary { cursor: pointer; }
+.cfg-ops-whitelist { padding: 10px 0; font-size: 12px; overflow-wrap: anywhere; }
+.cfg-ops-whitelist > div + div { margin-top: 7px; }
+.cfg-ops-count { background: var(--accent, #f4f4f5); padding: 8px 10px; border-radius: 5px; overflow-wrap: anywhere; }
+.cfg-ops-export > label { display: block; margin: 12px 0 5px; font-weight: 600; }
+.cfg-ops-json { box-sizing: border-box; display: block; width: 100%; min-height: 310px; max-height: 55vh; resize: vertical; border: 1px solid var(--border, #d4d4d8); border-radius: 6px; padding: 12px; color: #27272a; background: #fafafa; font: 12px/1.65 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre; }
+.cfg-ops-json:focus-visible, .cfg-ops-export summary:focus-visible { outline: 2px solid #52525b; outline-offset: 2px; }
+@media (max-width: 640px) {
+  .cfg-ops-row { padding: 13px 14px; gap: 12px; }
+  .cfg-ops-json { min-height: 240px; }
+}
