@@ -31,15 +31,15 @@ const ICO = {
 // ===== menu =====
 const MENU = [
   { g:"工作台", items:[
-    {id:"todo",n:"待办中心",i:"check",b:"5"},
+    {id:"todo",n:"待办中心",i:"check"},
     {id:"review",n:"审核处理",i:"check2"},
     {id:"dashboard",n:"数据看板",i:"chart"},
     {id:"report",n:"经营报表",i:"dl"},
-    {id:"risk",n:"风险提醒",i:"bell",b:"3"},
+    {id:"risk",n:"风险提醒",i:"bell"},
   ]},
   { g:"日常业务", items:[
     {id:"order",n:"订单管理",i:"buoy"},
-    {id:"activity",n:"活动与旅行团",i:"cal",b:"3"},
+    {id:"activity",n:"活动与旅行团",i:"cal"},
     {id:"checkin",n:"到店核销",i:"check2"},
     {id:"member",n:"会员管理",i:"user"},
   ]},
