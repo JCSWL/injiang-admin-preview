@@ -1870,7 +1870,7 @@ window.ADMIN_SCHEMA = {
           },
           {
             "label": "每人每店日限打卡次数",
-            "type": "数字",
+            "type": "整数",
             "required": true,
             "hint": "1",
             "readonly": false

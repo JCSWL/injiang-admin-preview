@@ -457,6 +457,7 @@
   function related(row, text) {
     const index = rowIndex(row);
     if (text === '核销记录') {
+      if(window.AdminDemoCheckin)return window.AdminDemoCheckin.listForMerchant(row.dataset.uxId);
       const name = row.uxValues?.['商户名'] || DATA.merchants[index]?.name;
       return recordList(`到店核销数据 · ${name}`,['核销编号','会员','打卡时间','评价确认','异常标记'],DATA.checkins.filter(c=>c.merch===name).map(c=>({'核销编号':c.id,'会员':c.user,'打卡时间':c.time,'评价确认':c.reviewed?'已确认':'待确认','异常标记':c.flag||'—'})));
     }

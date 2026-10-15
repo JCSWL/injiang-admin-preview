@@ -9,7 +9,7 @@
     destination:['目的地','主题','关联城市','状态'],
     ranking:['榜单','主题','关联城市','上次更新','状态'],
     content:['标题','分类','发布时间','状态'],
-    checkin:['会员','商户','打卡时间','评价确认','异常标记'],
+    checkin:['会员','商户','打卡时间','评价确认','异常标记','计入核销'],
     order:['订单号','关联对象','金额','履约','售后'],
     promo:['批次名','渠道','生成量','累计扫码','注册数'],
     coupon:['券','规则','有效期','状态'],
@@ -21,7 +21,7 @@
   const titleNames = {merchant:'商户',guide:'向导',activity:'活动',shop:'商品',destination:'目的地',ranking:'榜单',content:'标题',coupon:'券',member:'会员',notify:'模板名',city:'城市',account:'账号',promo:'批次名',order:'订单号',checkin:'会员'};
   const direct = {
     merchant:['编辑','核销记录','更多'],guide:['编辑','路线','更多'],
-    activity:['编辑','报名列表','更多'],shop:['编辑','规格','更多'],
+    activity:['编辑','报名名单','更多'],shop:['编辑','规格','更多'],
     destination:['编辑','更多'],ranking:['编辑','更多'],content:['编辑','更多'],
     coupon:['编辑','更多'],notify:['编辑','更多'],city:['编辑','更多'],
     account:['编辑','更多'],member:['运营维护'],

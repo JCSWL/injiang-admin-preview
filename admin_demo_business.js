@@ -322,9 +322,11 @@
     setTop('活动报名名单');
     $('page').innerHTML = screen(`${nameOf('activity', av)} · 报名名单`, `
       <section class="card"><div class="card-hd"><h2 class="card-t">活动资料</h2></div><div class="card-bd pd">${grid(av, ['活动名', '类型', '用户自发活动发起人', '关联城市', '开始时间', '结束时间', '人数上限', '最低成团人数', '是否付费', '成人价', '审核状态', '状态'])}</div></section>
+      <section class="card"><div class="card-hd"><h2 class="card-t">活动进度</h2><button class="btn btn-outline btn-sm" id="db-activity-progress" ${av['状态']==='上架'?'':'disabled title="先完成审核并上架活动"'}>修改进度</button></div><div class="card-bd pd"><strong>${esc(av['履约状态']||'待成行')}</strong><p class="dc-note">待成行：等待确认活动能否组织出发；已成行：已确认成行、尚未结束；已完成：活动服务结束。</p><p class="dc-note">进度由运营登记，与支付、审核和上下架状态分开；保存后同步该活动报名订单。</p></div></section>
       <section class="card"><div class="card-hd"><div><h2 class="card-t">报名名单</h2></div><span class="text-mut">${list.length} 人</span></div><div class="card-bd pd">${signupTable(list, highlightSignupId)}</div></section>`, '活动列表');
     bindBack(() => go('activity'));
     bindSignupRows();
+    $('db-activity-progress').onclick=()=>W.AdminDemoConfig?.activityProgress(activityId);
   }
   function signupContact(signupId) {
     const s = signups().find(x => x.id === signupId);
@@ -363,7 +365,7 @@
     });
     setTop('会员事件时间线');
     $('page').innerHTML = screen(`${memberName(mv)} · 事件时间线`, `
-      <section class="card"><div class="card-hd"><h2 class="card-t">会员资料</h2></div><div class="card-bd pd">${grid(mv, ['昵称', '来源渠道', '来自城市', '注册时间', '累计付费金额', '累计积分', '运营标签', '状态'])}</div></section>
+      <section class="card"><div class="card-hd"><h2 class="card-t">会员资料</h2></div><div class="card-bd pd">${grid(mv, ['昵称', '当前等级', '累计到店打卡数', '来源渠道', '来自城市', '注册时间', '累计付费金额', '累计积分', '运营标签', '状态'])}</div></section>
       <section class="card"><div class="card-hd"><h2 class="card-t">关联报名</h2></div><div class="card-bd pd">${mySignups.length ? mySignups.map(s => `<div class="db-line"><span>${esc(nameOf('activity', values('activity', s.activityId)))}</span><span class="text-mut">${esc(s.activityId)} · ${esc(s.orderId)}</span><div class="dc-actions"><button type="button" class="btn btn-outline btn-sm" data-db-order="${esc(s.orderId)}">订单</button></div></div>`).join('') : '<div class="empty">暂无关联报名</div>'}</div></section>
       <section class="card"><div class="card-hd"><h2 class="card-t">事件时间线</h2></div><div class="card-bd pd">${timeline.length ? `<ol class="db-timeline">${timeline.map(e => `<li><div class="db-tl-hd"><b>${esc(e.type || '事件')}</b><span>${esc(e.objectId || '')}</span><time>${esc(e.time || '')}</time></div><div>${esc(e.result || '')}</div></li>`).join('')}</ol>` : '<div class="empty">暂无事件记录</div>'}</div></section>
       <section class="card"><div class="card-hd"><h2 class="card-t">关联订单与核销</h2></div><div class="card-bd pd">${relatedOrderTable(myOrders, myCheckins)}</div></section>`, '会员列表');
@@ -380,10 +382,11 @@
   /* ---------- 核销证据与异常核实 ---------- */
   function checkinTable(list) {
     if (!list.length) return '<div class="empty"><h3>暂无核销记录</h3></div>';
-    return `<div class="tbl-scroll"><table class="tbl"><thead><tr><th>核销</th><th>时间</th><th>会员</th><th>评价</th><th>操作</th></tr></thead><tbody>${list.map(r => `<tr><td class="cell-m">${esc(nameOf('checkin', r.values))}</td><td>${esc(pick(r.values, ['打卡时间']))}</td><td>${esc(pick(r.values, ['会员', '会员昵称']))}</td><td>${esc(pick(r.values, ['评价内容']) || '')}</td><td class="row-acts"><button type="button" class="btn btn-outline btn-sm" data-db-checkin="${esc(r.id)}">证据/异常</button></td></tr>`).join('')}</tbody></table></div>`;
+    return `<div class="tbl-scroll"><table class="tbl"><thead><tr><th>核销</th><th>时间</th><th>会员</th><th>评价</th><th>操作</th></tr></thead><tbody>${list.map(r => `<tr><td class="cell-m">${esc(nameOf('checkin', r.values))}</td><td>${esc(pick(r.values, ['打卡时间']))}</td><td>${esc(pick(r.values, ['会员', '会员昵称']))}</td><td>${esc(pick(r.values, ['评价内容']) || '')}</td><td class="row-acts"><button type="button" class="btn btn-outline btn-sm" data-db-checkin="${esc(r.id)}">详情</button></td></tr>`).join('')}</tbody></table></div>`;
   }
   function checkinDetail(id) {
     if (!can('checkin')) return;
+    if(W.AdminDemoCheckin)return W.AdminDemoCheckin.detail(id);
     const v = values('checkin', id);
     if (!v || !Object.keys(v).length) { PrototypeUI.notice('未找到核销记录'); return; }
     const m = anomalyMap();
@@ -414,6 +417,7 @@
   }
   function checkinRecords(objectId, backPage) {
     if (!can('checkin')) return;
+    if(W.AdminDemoCheckin&&backPage==='merchant')return W.AdminDemoCheckin.listForMerchant(objectId);
     const list = records('checkin').filter(r => {
       const v = r.values || {};
       return pick(v, ['关联商户', '商户ID', '商户']) === objectId || String(pick(v, ['商户', '商户名'])) === objectId;
@@ -617,7 +621,7 @@
     else if (id === 'member') enhanceRows('member', 'member-timeline', '事件时间线');
     else if (id === 'coupon') enhanceRows('coupon', 'coupon-records', '领取/使用');
     else if (id === 'order') enhanceRows('order', 'order-history', '操作历史');
-    else if (id === 'checkin') enhanceRows('checkin', 'checkin-evidence', '证据/异常');
+    else if (id === 'checkin' && !W.AdminDemoCheckin) enhanceRows('checkin', 'checkin-evidence', '详情');
   }
   function enhanceRows(page, action, label) {
     if (!can(page)) return;
@@ -627,6 +631,10 @@
       if (row.querySelector(`[data-db-action="${action}"]`)) return;
       const cell = row.lastElementChild;
       if (!cell) return;
+      if(page==='activity'){
+        const existing=[...cell.querySelectorAll('button')].find(b=>/^(报名列表|报名名单)$/.test(b.textContent.trim()));
+        if(existing){existing.textContent=label;existing.dataset.dbAction=action;existing.dataset.dbId=id;existing.onclick=ev=>{ev.preventDefault();ev.stopPropagation();runAction(action,id);};return;}
+      }
       const btn = doc.createElement('button');
       btn.type = 'button'; btn.className = 'btn btn-outline btn-sm';
       btn.dataset.dbAction = action; btn.dataset.dbId = id; btn.textContent = label;
