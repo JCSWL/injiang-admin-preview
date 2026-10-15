@@ -601,10 +601,7 @@
     if(help[text]) return info(text,help[text]);
     return info(text || '通知', '当前没有可处理的内容。');
   }
-  function moreMenu(row,anchor) {
-    document.querySelector('.ux-popover')?.remove();
-    const menu=document.createElement('div');menu.className='ux-popover';menu.setAttribute('role','menu');
-    const data=rowData(row),state=data['状态']||row.uxValues?.['状态'];
+  function moreActions(row) {
     const resources=['merchant','guide','activity','destination','ranking','shop','content'];
     const inline=[...row.querySelectorAll('.row-acts button')].map(b=>b.textContent.trim());
     const actions=[];
@@ -616,6 +613,13 @@
       if(!inline.includes('编辑'))actions.push(['编辑资料',()=>editor(ui.page,row,false,`编辑资料 · ${pageName(ui.page)}`)]);
       actions.push(['删除',()=>removePreview(row),true]);
     } else if(ui.page==='member' && !inline.includes('运营维护')) actions.push(['运营维护',()=>editor('member',row,false,'运营维护')]);
+    return actions;
+  }
+  function moreMenu(row,anchor) {
+    document.querySelector('.ux-popover')?.remove();
+    const actions=moreActions(row);
+    if(!actions.length)return;
+    const menu=document.createElement('div');menu.className='ux-popover';menu.setAttribute('role','menu');
     menu.innerHTML=actions.map(([title,fn,danger],i)=>`<button class="ux-menu-item ${danger?'danger':''}" role="menuitem" data-menu-action="${i}">${safe(title)}</button>`).join('');document.body.append(menu);
     const rect=(anchor||row.querySelector('button')).getBoundingClientRect();
     menu.style.left=`${Math.max(8,Math.min(innerWidth-180,rect.right-170))}px`;menu.style.top=`${Math.min(innerHeight-menu.offsetHeight-8,rect.bottom+6)}px`;
@@ -723,6 +727,15 @@
     $('page').querySelectorAll('button').forEach(button=> {
       if(button.classList.contains('ux-row-title')) return;
       if(button.classList.contains('pag-btn')) {button.onclick=()=>notice('已显示全部记录');return;}
+      const row=button.closest('tbody tr');
+      if(row&&button.getAttribute('aria-haspopup')==='menu'){
+        const actions=moreActions(row);
+        if(actions.length===1){
+          button.textContent=actions[0][0];
+          button.removeAttribute('aria-haspopup');button.removeAttribute('aria-label');
+          button.onclick=actions[0][1];return;
+        }
+      }
       button.onclick=()=>buttonAction(button);
     });
     $('page').querySelectorAll('.tab').forEach(tab=>{
