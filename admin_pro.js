@@ -281,18 +281,19 @@ function wrapTables(){
 }
 
 function bindRoleSwitch(){
-  const sw = $('roleSwitch');
-  if(!sw) return;
-  sw.querySelectorAll('.rs-btn').forEach(b=>{
-    b.onclick = ()=>{
-      const next = b.dataset.role;
-      if(next===ROLE) return;
-      ROLE = next;
-      const cur = (location.hash||'#dashboard').slice(1);
-      const allowed = ROLE_MENU[ROLE] || [];
-      navigate(allowed.includes(cur) && PAGES[cur] ? cur : 'dashboard');
-    };
-  });
+  // Delegate to the stable container: business pages replace its innerHTML.
+  const topbar = $('topbar');
+  if(!topbar) return;
+  topbar.onclick = event=>{
+    const b = event.target.closest('#roleSwitch .rs-btn');
+    if(!b || !topbar.contains(b)) return;
+    const next = b.dataset.role;
+    if(next===ROLE || !ROLE_MENU[next]) return;
+    ROLE = next;
+    const cur = (location.hash||'#dashboard').slice(1);
+    const allowed = ROLE_MENU[ROLE];
+    navigate(allowed.includes(cur) && PAGES[cur] ? cur : 'dashboard');
+  };
 }
 
 // 只读角色：渲染后收紧交互（隐藏操作列、主按钮、导入/新增类动作，保留查看/导出）
