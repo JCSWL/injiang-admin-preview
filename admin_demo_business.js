@@ -111,7 +111,7 @@
   }
 
   function csv(name, headers, rows) {
-    const escC = c => '"' + String(c ?? '').replace(/"/g, '""') + '"';
+    const escC = c => {let text=String(c??'');if(/^[\s\uFEFF]*[=+@-]/.test(text))text="'"+text;return '"'+text.replace(/"/g,'""')+'"';};
     const text = '\ufeff' + [headers, ...rows].map(r => r.map(escC).join(',')).join('\r\n');
     try {
       const u = ui();
@@ -181,6 +181,12 @@
     $('page').querySelectorAll('[data-db-review-tab]').forEach(b => b.onclick = () => { reviewTab = b.dataset.dbReviewTab; renderReview(); bindReview(); });
     $('page').querySelectorAll('[data-db-review-open]').forEach(b => b.onclick = () => { const parts = b.dataset.dbReviewOpen.split('|'); reviewDetail(parts[0], parts.slice(1).join('|')); });
   }
+  function reviewEvidence(v){
+    const raw=v['评价图片']||v['图片']||[],images=Array.isArray(raw)?raw:raw?[raw]:[];
+    const pictures=images.map(name=>{const url=ui().imageURL?.(name);return url?`<img class="dc-preview-img" src="${esc(url)}" alt="虚构评价图片">`:`<p>${esc(name)}（会话图片未提供）</p>`;}).join('');
+    const dimensions=v['各维度星级']&&typeof v['各维度星级']==='object'?v['各维度星级']:{};
+    return grid(v,['评价对象ID','会员ID','内容安全结果'])+'<p class="dc-note">内容安全结果与图片为虚构演示样例，不代表真实微信API审核；缺值显示未提供。</p><h3>评价图片 · 只读</h3>'+(pictures||'<p>未提供</p>')+(v['评价对象类型']==='商品'?'<h3>商品评价维度 · 只读</h3>'+grid(dimensions,['商品品质','物流速度','包装']):'');
+  }
   function reviewDetail(type, id) {
     if (!can('review') || !can(type)) return;
     const v = values(type, id);
@@ -191,7 +197,7 @@
     const hist = historyFor(type, id);
     setTop(catName(type) + '审核');
     $('page').innerHTML = screen(catName(type) + '审核', `
-      <section class="card"><div class="card-hd"><h2 class="card-t">提交资料 · 只读</h2></div><div class="card-bd pd">${grid(v, keys)}</div></section>
+      <section class="card"><div class="card-hd"><h2 class="card-t">提交资料 · 只读</h2></div><div class="card-bd pd">${grid(v, keys)}${type==='review'?reviewEvidence(v):''}</div></section>
       <section class="card"><div class="card-hd"><h2 class="card-t">对象级审核历史</h2></div><div class="card-bd pd">${hist.length ? hist.map(h => `<div class="db-hist"><div class="db-hist-hd">${chip(h.result)}<b>${esc(h.actor || '')}</b><span>${esc(h.time || '')}</span></div><div class="db-hist-bd">${esc(h.reason || '')}</div></div>`).join('') : '<div class="empty">暂无历史结论</div>'}</div></section>
       <section class="card"><div class="card-hd"><h2 class="card-t">本次审核结论</h2></div><div class="card-bd pd">
         <div class="fg"><label for="db-rv-result">审核结果</label><select id="db-rv-result" class="fld"><option value="">请选择</option><option value="已通过">已通过</option><option value="已驳回">已驳回</option></select></div>
@@ -231,7 +237,7 @@
   const isAA = v => /用户自发|约伴|AA/.test(pick(v, ['类型']) || '');
   const canShip = v => pick(v, ['类型']) === '商城' && pick(v, ['支付']) === '已付款' && pick(v, ['履约']) === '待发货' && !/申请|处理|已退款|已换货/.test(pick(v, ['售后']) || '');
 
-  function orderDetail(id) {
+  function orderDetail(id,returnAction) {
     if (!can('order')) return;
     const source = values('order', id);
     if (!source || !Object.keys(source).length) { PrototypeUI.notice('未找到订单资料'); return; }
@@ -245,13 +251,13 @@
         <p class="text-mut">订单事实只读；金额与支付记录不改写。</p>
         <div class="dc-actions mt-3">${canShip(v) ? `<button class="btn btn-primary" data-db-order-ship="${esc(id)}">填写物流并发货</button>` : ''}${!isAA(v) && v['支付'] === '已付款' ? `<button class="btn btn-outline" data-db-order-after="${esc(id)}">售后结果登记</button>` : ''}${v['类型'] !== '商城' ? `<button class="btn btn-outline" data-db-order-contact="${esc(id)}">登记联系进度</button>` : ''}</div>
         <p class="db-note mt-3">${isAA(v) ? '用户约伴费用由参与者协商，平台不代收，也不办理平台退款。历史金额与支付记录保留供核对。' : '商城发货填写物流公司和单号。售后仅登记申请/处理/已退款/已换货等本地状态，不执行退款，也不发送通知。'}</p>
-      </div></section>`, '订单列表');
-    bindBack(() => go('order'));
-    const s = $('page').querySelector('[data-db-order-ship]'); if (s) s.onclick = () => orderForm(id, 'ship');
-    const a = $('page').querySelector('[data-db-order-after]'); if (a) a.onclick = () => orderForm(id, 'after');
-    const c = $('page').querySelector('[data-db-order-contact]'); if (c) c.onclick = () => orderForm(id, 'contact');
+      </div></section>`, returnAction?'报名名单':'订单列表');
+    bindBack(returnAction||(()=>go('order')));
+    const s = $('page').querySelector('[data-db-order-ship]'); if (s) s.onclick = () => orderForm(id, 'ship',returnAction);
+    const a = $('page').querySelector('[data-db-order-after]'); if (a) a.onclick = () => orderForm(id, 'after',returnAction);
+    const c = $('page').querySelector('[data-db-order-contact]'); if (c) c.onclick = () => orderForm(id, 'contact',returnAction);
   }
-  function orderForm(id, mode) {
+  function orderForm(id, mode,returnAction) {
     if (!can('order')) return;
     const v = values('order', id);
     if (!v || !Object.keys(v).length) return;
@@ -296,23 +302,47 @@
       try { if (!PrototypeUI.patchRecord('order', id, patch)) return fail('当前订单状态不允许此操作'); } catch (e) { return fail('当前订单状态不允许此操作'); }
       pushShared('orderHistory', { orderId: id, action, time: now(), detail: summary });
       try { PrototypeUI.recordOperation(action, id, summary); } catch (e) {}
-      PrototypeUI.close(); orderDetail(id); PrototypeUI.notice('记录已保存');
+      PrototypeUI.close(); orderDetail(id,returnAction); PrototypeUI.notice('记录已保存');
     };
   }
 
   /* ---------- 活动报名名单 ---------- */
-  function signupTable(list, highlightId) {
-    if (!list.length) return '<div class="empty"><h3>该活动暂无报名名单</h3><div>报名名单按活动ID与共享资料池一致关联，不虚构人数。</div></div>';
-    return `<div class="tbl-scroll"><table class="tbl"><thead><tr><th>报名人</th><th>会员ID</th><th>订单ID</th><th>联系进度</th><th>操作</th></tr></thead><tbody>${list.map(s => {
-      const m = values('member', s.memberId), o = values('order', s.orderId);
-      const status = s.contact || pick(o, ['联系状态']) || '待联系';
-      return `<tr class="${s.id === highlightId ? 'db-hl' : ''}"><td class="cell-m">${esc(s.name || memberName(m))}</td><td class="num">${esc(s.memberId)}</td><td class="num">${esc(s.orderId)}</td><td>${chip(status)}</td><td class="row-acts"><button type="button" class="btn btn-outline btn-sm" data-db-member="${esc(s.memberId)}">查会员</button><button type="button" class="btn btn-outline btn-sm" data-db-order="${esc(s.orderId)}">查订单</button><button type="button" class="btn btn-outline btn-sm" data-db-contact="${esc(s.id)}">联系进度</button></td></tr>`;
-    }).join('')}</tbody></table></div>`;
+  const signupFilters=new Map();
+  function signupView(s) {
+    const m=values('member',s.memberId),o=values('order',s.orderId),a=values('activity',s.activityId);
+    const qty=Number(o['数量']),guide=a['类型']==='向导带队';
+    return {'报名ID':s.id,'活动ID':s.activityId,'活动名':nameOf('activity',a),'报名人':s.name||memberName(m),'会员ID':s.memberId,'订单ID':s.orderId,'报名人数':Number.isInteger(qty)&&qty>0?qty:'未提供','下单时间':o['下单时间']||'未提供','支付时间':o['支付时间']||(o['支付']==='不涉及平台付款'?'不适用':'未提供'),'支付状态':o['支付']||'未提供','订单原价':o['订单原价']??'未提供','优惠券抵扣':o['优惠券抵扣']??'未提供','实付金额':o['金额']??'未提供','联系电话':memberContact(m)!=='未提供'?memberContact(m):o['买家电话']||'未提供','用户备注':o['用户备注']||'未提供','运营备注':o['运营内部备注']||'未提供','关联向导ID':guide?a['关联向导']||'未提供':'不适用','关联合作方ID':a['类型']==='外部合作旅行团'?a['关联合作方']||'未提供':'不适用','联系进度':s.contact||o['联系状态']||'待联系','是否已加向导微信':guide?s.wechatAdded||'未登记':'不适用'};
   }
+  function filteredSignups(activityId){
+    const filter=signupFilters.get(activityId)||{q:'',contact:''};
+    return signups().filter(s=>s.activityId===activityId).filter(s=>{
+      const v=signupView(s);return (!filter.contact||v['联系进度']===filter.contact)&&(!filter.q||[v['报名人'],s.memberId,s.orderId,v['联系电话']].join(' ').toLowerCase().includes(filter.q.toLowerCase()));
+    });
+  }
+  function signupTable(list,highlightId){
+    if(!list.length)return '<div class="empty"><h3>暂无匹配的报名记录</h3><div>人数只读取关联订单，不从名单条数猜测。</div></div>';
+    const heads=['报名人','会员ID','订单ID','报名人数','支付状态','实付金额','联系进度','是否已加向导微信'];
+    return `<div class="tbl-scroll"><table class="tbl"><thead><tr>${heads.map(h=>'<th>'+esc(h)+'</th>').join('')}<th>操作</th></tr></thead><tbody>${list.map(s=>{const v=signupView(s);return `<tr data-db-signup-row="${esc(s.id)}" class="${s.id===highlightId?'db-hl':''}">${heads.map(h=>'<td>'+esc(v[h])+'</td>').join('')}<td class="row-acts"><div class="dc-actions"><button type="button" class="btn btn-outline btn-sm" data-db-signup-detail="${esc(s.id)}">详情</button><button type="button" class="btn btn-outline btn-sm" data-db-contact="${esc(s.id)}">联系进度</button>${v['是否已加向导微信']!=='不适用'?`<button type="button" class="btn btn-outline btn-sm" data-db-wechat="${esc(s.id)}">加微信登记</button>`:''}</div></td></tr>`;}).join('')}</tbody></table></div>`;
+  }
+  function signupDetails(id){
+    const s=signups().find(x=>x.id===id);if(!s||!can('activity'))return;
+    const v=signupView(s),root=PrototypeUI.dialog('报名详情 · '+v['报名人'],grid(v,Object.keys(v)),'<button class="btn btn-outline" data-prototype-close>返回名单</button><button class="btn btn-outline" id="db-signup-member">查看会员</button><button class="btn btn-outline" id="db-signup-order">查看订单</button>');
+    root.querySelector('#db-signup-member').onclick=()=>{PrototypeUI.close();memberDetail(s.memberId,()=>activitySignups(s.activityId,id));};
+    root.querySelector('#db-signup-order').onclick=()=>{PrototypeUI.close();orderDetail(s.orderId,()=>activitySignups(s.activityId,id));};
+  }
+  function signupWechat(id){
+    const s=signups().find(x=>x.id===id);if(!s||!can('activity')||signupView(s)['是否已加向导微信']==='不适用')return;
+    const root=PrototypeUI.dialog('登记是否已加向导微信','<label for="db-wechat-value">是否已加向导微信</label><select id="db-wechat-value" class="fld"><option>未登记</option><option>未添加</option><option>已添加</option></select><p class="dc-note">与联系进度独立登记；不发送微信或替用户加好友。</p>','<button class="btn btn-outline" data-prototype-close>取消</button><button class="btn btn-primary" id="db-wechat-save">保存</button>');
+    root.querySelector('#db-wechat-value').value=s.wechatAdded||'未登记';root.querySelector('#db-wechat-save').onclick=()=>{const old=s.wechatAdded||'未登记';s.wechatAdded=root.querySelector('#db-wechat-value').value;PrototypeUI.recordOperation('报名微信登记',s.id,old+' → '+s.wechatAdded);PrototypeUI.close();activitySignups(s.activityId,id);};
+  }
+  function activitySignupCSV(id){if(!can('activity'))return;const list=filteredSignups(id);if(!list.length)return PrototypeUI.notice('没有匹配报名，未生成CSV');const first=signupView(list[0]),heads=Object.keys(first);csv('本活动报名名单.csv',heads,list.map(s=>{const v=signupView(s);return heads.map(h=>v[h]);}));}
+  function paintSignupList(id,highlight){const list=filteredSignups(id),all=signups().filter(s=>s.activityId===id),total=list.reduce((n,s)=>n+(typeof signupView(s)['报名人数']==='number'?signupView(s)['报名人数']:0),0),missing=list.filter(s=>typeof signupView(s)['报名人数']!=='number').length;$('db-signup-table').innerHTML=signupTable(list,highlight);$('db-signup-count').textContent=`显示${list.length}/${all.length}条报名；已提供人数合计${total}${missing?'；'+missing+'条人数未提供':''}`;bindSignupRows();}
   function bindSignupRows() {
     $('page').querySelectorAll('[data-db-member]').forEach(b => b.onclick = () => memberDetail(b.dataset.dbMember));
     $('page').querySelectorAll('[data-db-order]').forEach(b => b.onclick = () => orderDetail(b.dataset.dbOrder));
     $('page').querySelectorAll('[data-db-contact]').forEach(b => b.onclick = () => signupContact(b.dataset.dbContact));
+    $('page').querySelectorAll('[data-db-signup-detail]').forEach(b=>b.onclick=()=>signupDetails(b.dataset.dbSignupDetail));
+    $('page').querySelectorAll('[data-db-wechat]').forEach(b=>b.onclick=()=>signupWechat(b.dataset.dbWechat));
   }
   function activitySignups(activityId, highlightSignupId) {
     if (!can('activity')) return;
@@ -323,9 +353,13 @@
     $('page').innerHTML = screen(`${nameOf('activity', av)} · 报名名单`, `
       <section class="card"><div class="card-hd"><h2 class="card-t">活动资料</h2></div><div class="card-bd pd">${grid(av, ['活动名', '类型', '用户自发活动发起人', '关联城市', '开始时间', '结束时间', '人数上限', '最低成团人数', '是否付费', '成人价', '审核状态', '状态'])}</div></section>
       <section class="card"><div class="card-hd"><h2 class="card-t">活动进度</h2><button class="btn btn-outline btn-sm" id="db-activity-progress" ${av['状态']==='上架'?'':'disabled title="先完成审核并上架活动"'}>修改进度</button></div><div class="card-bd pd"><strong>${esc(av['履约状态']||'待成行')}</strong><p class="dc-note">待成行：等待确认活动能否组织出发；已成行：已确认成行、尚未结束；已完成：活动服务结束。</p><p class="dc-note">进度由运营登记，与支付、审核和上下架状态分开；保存后同步该活动报名订单。</p></div></section>
-      <section class="card"><div class="card-hd"><div><h2 class="card-t">报名名单</h2></div><span class="text-mut">${list.length} 人</span></div><div class="card-bd pd">${signupTable(list, highlightSignupId)}</div></section>`, '活动列表');
+      <section class="card"><div class="card-hd"><h2 class="card-t">报名名单</h2><button class="btn btn-outline btn-sm" id="db-signup-export">导出当前名单CSV</button></div><div class="card-bd pd"><div class="dc-actions"><label for="db-signup-query">搜索报名人/会员/订单/电话</label><input id="db-signup-query" class="fld" type="search"><label for="db-signup-contact-filter">联系进度</label><select id="db-signup-contact-filter" class="fld"><option value="">全部</option><option>待联系</option><option>已联系</option></select></div><p id="db-signup-count" class="dc-note"></p><div id="db-signup-table"></div></div></section>`, '活动列表');
     bindBack(() => go('activity'));
-    bindSignupRows();
+    const filter=signupFilters.get(activityId)||{q:'',contact:''};
+    $('db-signup-query').value=filter.q;$('db-signup-contact-filter').value=filter.contact;
+    const apply=()=>{signupFilters.set(activityId,{q:$('db-signup-query').value.trim(),contact:$('db-signup-contact-filter').value});paintSignupList(activityId,highlightSignupId);};
+    $('db-signup-query').oninput=apply;$('db-signup-contact-filter').onchange=apply;
+    $('db-signup-export').onclick=()=>activitySignupCSV(activityId);paintSignupList(activityId,highlightSignupId);
     $('db-activity-progress').onclick=()=>W.AdminDemoConfig?.activityProgress(activityId);
   }
   function signupContact(signupId) {
@@ -346,10 +380,11 @@
   }
 
   /* ---------- 会员事件时间线 ---------- */
-  function memberDetail(id) {
+  function memberDetail(id,returnAction) {
     if (!can('member')) return;
     const mv = values('member', id);
     if (!mv || !Object.keys(mv).length) { PrototypeUI.notice('未找到会员资料'); return; }
+    const attribution=W.AdminDemoPromo?.memberAttribution?.(id);
     const timeline = events().filter(e => e.memberId === id).slice().sort((a, b) => String(b.time).localeCompare(String(a.time)));
     const mySignups = signups().filter(s => s.memberId === id);
     const myOrders = records('order').filter(r => {
@@ -366,10 +401,12 @@
     setTop('会员事件时间线');
     $('page').innerHTML = screen(`${memberName(mv)} · 事件时间线`, `
       <section class="card"><div class="card-hd"><h2 class="card-t">会员资料</h2></div><div class="card-bd pd">${grid(mv, ['昵称', '当前等级', '累计到店打卡数', '来源渠道', '来自城市', '注册时间', '累计付费金额', '累计积分', '运营标签', '状态'])}</div></section>
+      ${attribution?`<section class="card"><div class="card-hd"><h2 class="card-t">首绑来源 · 虚构推广样例</h2></div><div class="card-bd pd"><p>${esc(attribution.channelName)} · ${esc(attribution.codeId)} · 首绑 ${esc(attribution.at)}</p><p>累计已付款 ¥${money(attribution.amount)}；创建时比例 ${esc(attribution.ratio)}%；参考应分 ¥${money(attribution.commission)}</p><p class="dc-note">与上方原资料来源字段、历史手工单笔依据分开；扫码其他码不会覆盖本来源。</p><button class="btn btn-outline" id="db-promo-source">查看首绑与扫码明细</button></div></section>`:''}
       <section class="card"><div class="card-hd"><h2 class="card-t">关联报名</h2></div><div class="card-bd pd">${mySignups.length ? mySignups.map(s => `<div class="db-line"><span>${esc(nameOf('activity', values('activity', s.activityId)))}</span><span class="text-mut">${esc(s.activityId)} · ${esc(s.orderId)}</span><div class="dc-actions"><button type="button" class="btn btn-outline btn-sm" data-db-order="${esc(s.orderId)}">订单</button></div></div>`).join('') : '<div class="empty">暂无关联报名</div>'}</div></section>
       <section class="card"><div class="card-hd"><h2 class="card-t">事件时间线</h2></div><div class="card-bd pd">${timeline.length ? `<ol class="db-timeline">${timeline.map(e => `<li><div class="db-tl-hd"><b>${esc(e.type || '事件')}</b><span>${esc(e.objectId || '')}</span><time>${esc(e.time || '')}</time></div><div>${esc(e.result || '')}</div></li>`).join('')}</ol>` : '<div class="empty">暂无事件记录</div>'}</div></section>
-      <section class="card"><div class="card-hd"><h2 class="card-t">关联订单与核销</h2></div><div class="card-bd pd">${relatedOrderTable(myOrders, myCheckins)}</div></section>`, '会员列表');
-    bindBack(() => go('member'));
+      <section class="card"><div class="card-hd"><h2 class="card-t">关联订单与核销</h2></div><div class="card-bd pd">${relatedOrderTable(myOrders, myCheckins)}</div></section>`, returnAction?'报名名单':'会员列表');
+    bindBack(returnAction||(()=>go('member')));
+    $('db-promo-source')?.addEventListener('click',()=>W.AdminDemoPromo.bindingDetails(attribution.codeId));
     $('page').querySelectorAll('[data-db-order]').forEach(b => b.onclick = () => orderDetail(b.dataset.dbOrder));
     $('page').querySelectorAll('[data-db-checkin]').forEach(b => b.onclick = () => checkinDetail(b.dataset.dbCheckin));
   }
@@ -470,6 +507,7 @@
       if (/待联系/.test(s.contact || pick(o, ['联系状态']) || '')) list.push({ key: 'contact-' + s.id, group: '报名', text: `待联系报名人：${s.name || memberName(values('member', s.memberId))}（${nameOf('activity', values('activity', s.activityId))}）`, action: 'signup', id: s.activityId, sub: s.id });
     });
     anomalyItems().filter(a => a.unhandled).forEach(a => list.push({ key: 'anomaly-' + a.id, group: '核销', text: `核销异常待核实：${a.id}`, action: 'checkin', id: a.id }));
+    for(const alert of W.AdminDemoConfig?.alerts?.()||[])list.push({key:'config-'+alert.id,group:alert.kind,text:alert.text,action:'config-alert',id:alert.id});
     return list;
   }
   function renderTodo() {
@@ -488,6 +526,7 @@
     else if (it.action === 'order') orderDetail(it.id);
     else if (it.action === 'checkin') checkinDetail(it.id);
     else if (it.action === 'signup') activitySignups(it.id, it.sub);
+    else if(it.action==='config-alert')W.AdminDemoConfig?.openAlert?.(it.id);
   }
 
   /* ---------- 汇总：dashboard / report / risk ---------- */
@@ -579,11 +618,8 @@
 
   /* ---------- CSV ---------- */
   function signupCSV() {
-    const rows = signups().map(s => {
-      const a = values('activity', s.activityId), m = values('member', s.memberId), o = values('order', s.orderId);
-      return [s.activityId, nameOf('activity', a), s.memberId, s.name || memberName(m), memberContact(m), s.orderId, s.contact || pick(o, ['联系状态']) || '待联系'];
-    });
-    csv('活动报名名单.csv', ['活动ID', '活动名', '会员ID', '姓名', '联系方式', '订单ID', '联系进度'], rows);
+    if(!can('activity'))return;const list=signups();if(!list.length)return PrototypeUI.notice('没有报名记录，未生成CSV');
+    const heads=Object.keys(signupView(list[0]));csv('活动报名名单.csv',heads,list.map(s=>{const v=signupView(s);return heads.map(h=>v[h]);}));
   }
   function reviewCSV() { csv('审核历史.csv', ['类型', '对象ID', '结果', '原因', '人员', '时间'], reviewHistory().map(h => [h.type, h.objectId, h.result, h.reason || '', h.actor || '', h.time || ''])); }
   function orderHistoryCSV() { csv('订单操作历史.csv', ['订单ID', '动作', '时间', '详情'], orderHistory().map(h => [h.orderId, h.action, h.time || '', h.detail || ''])); }
@@ -620,7 +656,14 @@
     else if (id === 'activity') enhanceRows('activity', 'activity-signups', '报名名单');
     else if (id === 'member') enhanceRows('member', 'member-timeline', '事件时间线');
     else if (id === 'coupon') enhanceRows('coupon', 'coupon-records', '领取/使用');
-    else if (id === 'order') enhanceRows('order', 'order-history', '操作历史');
+    else if (id === 'order') {
+      enhanceRows('order','order-history','操作历史');
+      for(const select of $('page').querySelectorAll('.tbar select')){
+        const first=select.options[0]?.textContent||'';
+        const opts=first.includes('支付')?['待付款','已付款','已取消','不涉及平台付款']:first.includes('履约')?['待发货','已发货','已签收','待成行','已成行','已完成']:[];
+        for(const text of opts)if(![...select.options].some(o=>o.value===text))select.add(new Option(text,text));
+      }
+    }
     else if (id === 'checkin' && !W.AdminDemoCheckin) enhanceRows('checkin', 'checkin-evidence', '详情');
   }
   function enhanceRows(page, action, label) {

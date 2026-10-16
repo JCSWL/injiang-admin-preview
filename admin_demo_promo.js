@@ -94,7 +94,22 @@
     s.templates=[{id:'TPL001',name:'出行场景',channelId:'',enabled:true,image:'demo-content.svg',headline:'在新疆轻松出行',button:'查看热门玩法',target:'热门玩法',items:[{title:'城市轻旅行',target:'热门玩法'}]},{id:'TPL002',name:'酒店周边',channelId:'CH002',enabled:true,image:'demo-goods.svg',headline:'发现酒店附近的好味道',button:'查看本地美食',target:'本地美食',items:[{title:'在地美食',target:'本地美食'}]}];
     s.batches=[{id:'BAT001',name:'出租车首批',channelId:'CH001',templateId:'TPL001',qty:3,ratio:1,createdAt:'2026-04-10 10:00'},{id:'BAT002',name:'酒店首批',channelId:'CH002',templateId:'TPL002',qty:2,ratio:2,createdAt:'2026-04-10 10:10'},{id:'BAT003',name:'大巴扎首批',channelId:'CH003',templateId:'TPL001',qty:1,ratio:1.5,createdAt:'2026-04-10 10:20'},{id:'BAT004',name:'导游首批',channelId:'CH004',templateId:'TPL001',qty:1,ratio:3,createdAt:'2026-04-10 10:30'}];
     const defs=[['CH001','BAT001','小马','O26041004'],['CH001','BAT001','',''],['CH001','BAT001','小马','O26041001'],['CH002','BAT002','阿丽','O26041002'],['CH002','BAT002','',''],['CH003','BAT003','热娜','O26041006'],['CH004','BAT004','','']];
-    s.codes=defs.map(([ch,batch,person,order],i)=>({id:'PR'+String(i+1).padStart(6,'0'),channelId:ch,batchId:batch,templateId:ch==='CH002'?'TPL002':'TPL001',ratio:s.channels.find(c=>c.id===ch).ratio,amount:0,distributor:person,orderId:order,status:order?'已登记订单':person?'已分发':'已生成',note:'',createdAt:'2026-04-10 10:00'}));
+    const phones={'小马':'0991-6000001','阿丽':'0991-6000002','热娜':'0991-6000003'};
+    s.codes=defs.map(([ch,batch,person,order],i)=>({id:'PR'+String(i+1).padStart(6,'0'),channelId:ch,batchId:batch,templateId:ch==='CH002'?'TPL002':'TPL001',ratio:s.channels.find(c=>c.id===ch).ratio,amount:0,distributor:person,distributorPhone:phones[person]||'',orderId:order,status:order?'已登记订单':person?'已分发':'已生成',note:'',createdAt:'2026-04-10 10:00'}));
+    // 生命周期首绑（明确虚构种子，独立于历史单订单归属；不根据历史订单推断）。
+    s.firstbinds=[
+      {memberId:'member:U10001',codeId:'PR000001',at:'2026-04-10 11:00',fictional:true,note:'虚构样例：生命周期首绑，独立于历史订单依据'},
+      {memberId:'member:U10003',codeId:'PR000007',at:'2026-04-10 11:10',fictional:true,note:'虚构样例：渠道停用不改变来源'},
+      {memberId:'member:U10006',codeId:'PR000006',at:'2026-04-10 10:20',fictional:true,note:'虚构样例：同一会员多笔已付款订单归同一码'},
+      {memberId:'member:U10004',codeId:'PR000004',at:'2026-04-10 11:20',fictional:true,note:'虚构样例：无平台代收订单的会员'}
+    ];
+    s.scans=[
+      {id:'SCN001',codeId:'PR000001',memberId:'member:U10001',at:'2026-04-10 11:00',newMember:true,boundCodeId:'PR000001'},
+      {id:'SCN002',codeId:'PR000007',memberId:'member:U10003',at:'2026-04-10 11:10',newMember:true,boundCodeId:'PR000007'},
+      {id:'SCN003',codeId:'PR000006',memberId:'member:U10006',at:'2026-04-10 10:20',newMember:true,boundCodeId:'PR000006'},
+      {id:'SCN004',codeId:'PR000003',memberId:'member:U10006',at:'2026-04-11 09:05',newMember:false,boundCodeId:'PR000006'},
+      {id:'SCN005',codeId:'PR000004',memberId:'member:U10004',at:'2026-04-10 11:20',newMember:true,boundCodeId:'PR000004'}
+    ];
     s.seq={channel:5,template:3,batch:5,code:8};return s;
   }
   function save() { /* All changes are deliberately page-memory only. */ }
@@ -118,12 +133,14 @@
 
   /* ---------- 工具：CSV / 筛选 ---------- */
   function csvCell(value) {
-    const s = String(value ?? '');
+    let s = String(value ?? '');
+    // 表格注入防护：以公式引导符开头的单元格前置单引号，避免被 Excel 当作公式执行。
+    if (/^[\s\uFEFF]*[=+\-@]/.test(s)) s = "'" + s;
     return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   }
   function buildCSV(codes) {
-    const header = ['独立码ID', '渠道ID', '批次ID', '模板ID', '比例', '金额', '分发人', '状态', '订单依据', '备注'];
-    const rows = codes.map(c => [c.id, c.channelId, c.batchId || '', c.templateId || '', String(c.ratio ?? ''), money(turnover(c)), c.distributor || '', c.status || '', c.orderId || '', c.note || ''].map(csvCell).join(','));
+    const header = ['独立码ID', '渠道ID', '批次ID', '模板ID', '比例', '首绑累计已付款金额', '订单依据金额', '分发人', '分发人电话', '状态', '订单依据', '备注'];
+    const rows = codes.map(c => [c.id, c.channelId, c.batchId || '', c.templateId || '', String(c.ratio ?? ''), money(attributedAmount(c)), money(turnover(c)), c.distributor || '', c.distributorPhone || '', c.status || '', c.orderId || '', c.note || ''].map(csvCell).join(','));
     return [header.map(csvCell).join(','), ...rows].join('\r\n');
   }
   function parseCSV(text) {
@@ -141,6 +158,7 @@
       else if (ch === '\r') { /* skip */ }
       else cur += ch;
     }
+    if(inQ)throw new Error('CSV引号未闭合');
     if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
     return rows.filter(r => r.some(c => String(c).trim() !== ''));
   }
@@ -156,8 +174,17 @@
   }
   function orderFor(c){return c.orderId?W.PrototypeUI?.recordValues('order',c.orderId.startsWith('order:')?c.orderId:'order:'+c.orderId):null;}
   function turnover(c){const o=orderFor(c);return o&&o['支付']==='已付款'?Number(String(o['金额']).replace(/[^\d.-]/g,''))||0:0;}
-  function commission(c){return turnover(c)*Number(c.ratio||0)/100;}
-  function codeAmountText(c){return money(turnover(c));}
+  const canUse=()=>typeof ROLE!=='undefined'&&ROLE!=='boss'&&ROLE_MENU[ROLE]?.includes('promo');
+  function paidAmount(o){const n=Number(String(o?.['金额']||'').replace(/[^\d.-]/g,''));return Number.isFinite(n)&&n>=0?n:0;}
+  function memberPaidOrders(memberId){const bind=store.firstbinds.find(x=>x.memberId===memberId);if(!bind)return [];const since=new Date(bind.at.replace(' ','T')).getTime();return W.PrototypeUI.records('order').filter(r=>{const v=r.values,at=new Date(String(v['支付时间']||'').replace(' ','T')).getTime();return (v['会员ID']||v['买家ID'])===memberId&&v['支付']==='已付款'&&Number.isFinite(at)&&at>=since;});}
+  function attributedOrders(codeId){return store.firstbinds.filter(x=>x.codeId===codeId).flatMap(x=>memberPaidOrders(x.memberId));}
+  function attributedAmount(c){return attributedOrders(c.id).reduce((sum,o)=>sum+paidAmount(o.values),0);}
+  function commission(c){return attributedAmount(c)*Number(c.ratio||0)/100;}
+  function codeAmountText(c){return money(attributedAmount(c));}
+  function memberAttribution(id){id=String(id).startsWith('member:')?String(id):'member:'+id;const bind=store.firstbinds.find(x=>x.memberId===id);if(!bind)return null;const c=codeById(bind.codeId),orders=memberPaidOrders(id),amount=orders.reduce((s,o)=>s+paidAmount(o.values),0);return {...bind,channelId:c.channelId,channelName:chById(c.channelId)?.name,ratio:c.ratio,amount,commission:amount*Number(c.ratio)/100,orderIds:orders.map(x=>x.id)};}
+  function captureScan(memberId,codeId){if(!canUse())return false;const c=codeById(codeId),m=W.PrototypeUI.recordValues('member',memberId);if(!c||!m||!chById(c.channelId)?.enabled)return false;let bind=store.firstbinds.find(x=>x.memberId===memberId);const first=!bind;if(!bind){bind={memberId,codeId,at:now(),fictional:true,note:'本次会话模拟首次注册归属'};store.firstbinds.push(bind);}store.scans.push({id:'SCN'+String(store.scans.length+1).padStart(3,'0'),memberId,codeId,at:now(),newMember:first,boundCodeId:bind.codeId});logOp('推广扫码演示',memberId,codeId+'；首绑保留 '+bind.codeId);return {...bind};}
+  function scanDemo(){const members=W.PrototypeUI.records('member'),codes=store.codes.filter(c=>chById(c.channelId)?.enabled);const root=openDialog('模拟扫码注册 · 仅演示','<p class="dp-muted">无首绑样例的会员首次登记归此码；已有首绑只记扫码，不改变来源，不是生产注册。</p><label>会员<select class="fld" id="dp-scan-member">'+members.map(m=>'<option value="'+esc(m.id)+'">'+esc(m.values['昵称']||m.id)+'</option>').join('')+'</select></label><label>扫码对象<select class="fld" id="dp-scan-code">'+codes.map(c=>'<option>'+esc(c.id)+'</option>').join('')+'</select></label>','<button class="btn btn-outline" data-dp-cancel>取消</button><button class="btn btn-primary" id="dp-scan-save">记录演示扫码</button>');root.querySelector('[data-dp-cancel]').onclick=closeDialog;root.querySelector('#dp-scan-save').onclick=()=>{const result=captureScan(root.querySelector('#dp-scan-member').value,root.querySelector('#dp-scan-code').value);if(!result)return notice('无效会员、码或权限');closeDialog();rerender();notice('首绑来源保留：'+result.codeId);};}
+  function bindingDetails(codeId){if(!canUse())return;const rows=store.firstbinds.filter(x=>x.codeId===codeId).map(x=>{const m=W.PrototypeUI.recordValues('member',x.memberId)||{},a=memberAttribution(x.memberId);return '<tr><td>'+esc(x.memberId+' · '+(m['昵称']||''))+'</td><td>'+esc(x.at)+'</td><td>'+money(a.amount)+'</td><td>'+money(a.commission)+'</td><td>'+esc(a.orderIds.join('、')||'无已付款订单')+'</td></tr>';}).join('');const scans=store.scans.filter(x=>x.codeId===codeId).map(x=>'<tr><td>'+esc(x.memberId)+'</td><td>'+esc(x.at)+'</td><td>'+esc(x.boundCodeId)+'</td></tr>').join('');openDialog('首绑与扫码明细 · '+codeId,tableHTML(['首绑会员','首绑时间','累计已付款金额','参考应分','订单ID'],rows)+tableHTML(['扫码会员','时间','保留首绑码'],scans)+'<p class="dp-muted">明确虚构首绑样例，与旧手工单笔订单依据分开。全部已付款原金额累计，未定义退款净额；比例为码创建时快照。</p>');}
 
   /* ---------- 面板渲染 ---------- */
   function channelsPanel() {
@@ -254,7 +281,7 @@
       <td>${esc(c.distributor || '—')}</td>
       <td>${esc(c.status || '')}</td>
       <td>${c.orderId?`<button class="btn btn-ghost" data-dp-action="order-view" data-dp-id="${esc(c.orderId)}">${esc(c.orderId)}</button>`:'—'}</td>
-      <td class="dc-actions"><button class="btn btn-outline btn-sm" data-dp-action="code-edit" data-dp-id="${esc(c.id)}">登记</button></td>
+      <td class="dc-actions"><button class="btn btn-outline btn-sm" data-dp-action="code-edit" data-dp-id="${esc(c.id)}">登记</button><button class="btn btn-outline btn-sm" data-dp-action="bind-view" data-dp-id="${esc(c.id)}">首绑明细</button></td>
     </tr>`).join('');
 
     const byPerson = new Map();
@@ -262,7 +289,7 @@
       if (!c.distributor) continue;
       const cur = byPerson.get(c.distributor) || { count: 0, total: 0, share:0 };
       cur.count += 1;
-      cur.total+=turnover(c);cur.share+=commission(c);
+      cur.total+=attributedAmount(c);cur.share+=commission(c);
       byPerson.set(c.distributor, cur);
     }
     const personRows = [...byPerson.entries()].map(([name, v]) => `<tr><td>${esc(name)}</td><td>${v.count}</td><td>${money(v.total)}</td><td>${money(v.share)}</td></tr>`).join('');
@@ -270,11 +297,11 @@
       <td><code>${esc(c.id)}</code></td>
       <td>${esc(c.orderId)}</td>
       <td>${esc(c.distributor || '—')}</td>
-      <td>${esc(codeAmountText(c))}</td>
+      <td>${money(turnover(c))}</td>
       <td>${esc(c.status || '')}</td></tr>`).join('');
 
     return `<section class="card"><div class="card-hd"><h2 class="card-t">逐码数据</h2>
-      <button class="btn btn-outline btn-sm" data-dp-action="code-zip">导出ZIP（码PNG+CSV清单）</button></div>
+      <button class="btn btn-outline btn-sm" data-dp-action="scan-demo">模拟扫码注册</button><button class="btn btn-outline btn-sm" data-dp-action="code-csv">当前筛选CSV</button><button class="btn btn-outline btn-sm" data-dp-action="code-zip">导出ZIP（码PNG+CSV清单）</button></div>
       <div class="dp-filters">
         <select class="fld" data-dp-filter="channel"><option value="">全部渠道</option>${channelOpts}</select>
         <select class="fld" data-dp-filter="status"><option value="">全部状态</option>${statusOpts}</select>
@@ -283,19 +310,19 @@
         <button class="btn btn-outline btn-sm" data-dp-action="filter-apply">筛选</button>
         <button class="btn btn-outline btn-sm" data-dp-action="filter-clear">清除</button>
       </div>
-      ${list.length ? tableHTML(['码ID', '渠道', '批次', '比例', '成交金额', '参考应分', '分发人', '状态', '订单依据', '操作'], rows) : emptyHTML('没有符合条件的码，试试调整筛选条件。')}
+      ${list.length ? tableHTML(['码ID', '渠道', '批次', '创建时比例', '首绑累计付款', '参考应分', '分发人', '状态', '订单依据', '操作'], rows) : emptyHTML('没有符合条件的码，试试调整筛选条件。')}
       ${list.length > 200 ? `<p class="dp-muted">共 ${list.length} 条，仅显示前 200 条；请用筛选缩小范围。</p>` : `<p class="dp-muted">当前筛选命中 ${list.length} 条。</p>`}
       </section>
       <section class="card"><div class="card-hd"><h2 class="card-t">按分发人汇总</h2></div>
       ${personRows ? tableHTML(['分发人', '码数量', '成交金额', '参考应分'], personRows) : emptyHTML('暂无已登记分发人的码。')}</section>
-      <section class="card"><div class="card-hd"><h2 class="card-t">用户订单依据</h2></div>
+      <section class="card"><div class="card-hd"><h2 class="card-t">历史单笔订单依据（不等于会员首绑）</h2></div>
       ${orderRows ? tableHTML(['码ID', '订单依据', '分发人', '金额', '状态'], orderRows) : emptyHTML('暂无订单依据；新生成码为零业务数据，登记订单后出现在这里。')}</section>`;
   }
 
   function ioPanel() {
     const example = store.codes.slice(0, 2);
     return sharedCard('导入 / 导出 CSV 登记模板', `<div class="dp-io">
-      <p>导出登记模板用于填写「独立码ID + 分发人 + 状态 + 订单依据」；导入只更新已有码的登记信息，<b>不覆盖创建时比例</b>，未知码ID会跳过。</p>
+      <p>填写独立码ID、分发人/电话、状态及历史订单依据。先逐行预检，确认后只应用有效行；<b>不覆盖金额、创建时比例或会员首绑</b>。清单沿用码数据页当前筛选。</p>
       <div class="dc-actions">
         <button class="btn btn-outline" data-dp-action="io-template">下载登记模板</button>
         <button class="btn btn-outline" data-dp-action="io-export">下载当前码清单 CSV</button>
@@ -334,6 +361,7 @@
     if (!root) return;
     root.querySelector('[data-dp-cancel]').onclick = closeDialog;
     root.querySelector('[data-dp-ok]').onclick = () => {
+      if(!canUse())return;
       const name = root.querySelector('[data-dp-f="name"]').value.trim();
       const note = root.querySelector('[data-dp-f="note"]').value.trim();
       if (!name) { notice('请填写渠道名称。'); return; }
@@ -374,6 +402,7 @@
     if (!root) return;
     root.querySelector('[data-dp-cancel]').onclick = closeDialog;
     root.querySelector('[data-dp-ok]').onclick = () => {
+      if(!canUse())return;
       const name = root.querySelector('[data-dp-f="name"]').value.trim();
       const channelId = root.querySelector('[data-dp-f="channel"]').value;
       const headline=root.querySelector('[data-dp-f="headline"]').value.trim(),subtitle=root.querySelector('[data-dp-f="subtitle"]').value.trim(),button=root.querySelector('[data-dp-f="button"]').value.trim(),target=root.querySelector('[data-dp-f="target"]').value;
@@ -420,6 +449,7 @@
     root.querySelector('[data-dp-f="channel"]').onchange=()=>root.querySelector('[data-dp-f="ratio"]').value=chById(root.querySelector('[data-dp-f="channel"]').value)?.ratio??0;
     root.querySelector('[data-dp-cancel]').onclick = closeDialog;
     root.querySelector('[data-dp-ok]').onclick = () => {
+      if(!canUse())return;
       const name = root.querySelector('[data-dp-f="name"]').value.trim();
       if(!name)return notice('请填写批次名称');
       const channelId = root.querySelector('[data-dp-f="channel"]').value;
@@ -436,7 +466,7 @@
       for (let i = 0; i < qty; i++) {
         codes.push({
           id: nextId('code'), channelId, templateId, batchId, ratio,
-          amount: '', distributor: '', status: '已生成', orderId: '', note, createdAt: now()
+          amount: '', distributor: '', distributorPhone:'', status: '已生成', orderId: '', note, createdAt: now()
         });
       }
       store.batches.push({ id: batchId, name, channelId, templateId, qty, ratio, note, createdAt: now() });
@@ -457,7 +487,7 @@
       `<div class="dp-form">
         <p class="dp-muted">渠道 ${esc(ch?.name || c.channelId || '—')} · 批次 ${esc(c.batchId || '独立码')} · 创建时比例 ${esc(String(c.ratio))}%（只读，不覆盖）</p>
         <label>订单成交金额（只读）<input class="fld" type="number" data-dp-f="amount" readonly value="${money(turnover(c))}"></label>
-        <label>分发人<input class="fld" data-dp-f="distributor" value="${esc(c.distributor || '')}" maxlength="40"></label>
+        <p class="dp-muted">首绑会员累计已付款：¥${money(attributedAmount(c))}，参考应分 ¥${money(commission(c))}；旧单笔订单依据独立保留，不自动推断会员来源。</p><label>分发人<input class="fld" data-dp-f="distributor" value="${esc(c.distributor || '')}" maxlength="40"></label><label>分发联系电话<input class="fld" data-dp-f="distributor-phone" value="${esc(c.distributorPhone||'')}" maxlength="30"></label>
         <label>状态<select class="fld" data-dp-f="status">${statusOpts}</select></label>
         <label>订单依据（已有样例订单）<select class="fld" data-dp-f="order"><option value="">暂未关联订单</option>${W.PrototypeUI.records('order').filter(x=>x.values['支付']==='已付款').map(x=>{const id=x.values['订单号'];return `<option value="${esc(id)}" ${id===c.orderId?'selected':''}>${esc(id+' · '+x.values['买家']+' · '+x.values['金额'])}</option>`;}).join('')}</select></label>
         <label>备注<input class="fld" data-dp-f="note" value="${esc(c.note || '')}" maxlength="120"></label>
@@ -467,6 +497,7 @@
     root.querySelector('[data-dp-f="order"]').onchange=()=>root.querySelector('[data-dp-f="amount"]').value=money(turnover({...c,orderId:root.querySelector('[data-dp-f="order"]').value}));
     root.querySelector('[data-dp-cancel]').onclick = closeDialog;
     root.querySelector('[data-dp-ok]').onclick = () => {
+      if(!canUse())return;
       const amountText = root.querySelector('[data-dp-f="amount"]').value.trim();
       const amount = amountText === '' ? '' : Number(amountText);
       if (amount !== '' && (!Number.isFinite(amount) || amount < 0)) { notice('金额须为非负数字。'); return; }
@@ -478,6 +509,7 @@
       if(orderId&&store.codes.some(x=>x.id!==c.id&&x.orderId===orderId))return notice('这笔订单已归属其他码，不重复计算');
       c.amount = orderId?turnover({...c,orderId}):0;
       c.distributor = distributor;
+      c.distributorPhone=root.querySelector('[data-dp-f="distributor-phone"]').value.trim();
       c.status = orderId?'已登记订单':distributor?'已分发':'已生成';
       c.orderId = orderId;
       c.note = note;
@@ -489,6 +521,7 @@
   /* ---------- ZIP 导出 ---------- */
   async function exportZip(codes) {
     const ui = W.AdminDemoUI;
+    if(!canUse())return;
     if (!ui?.zip || !ui?.codeImage || !ui?.downloadBlob) { notice('ZIP 接口尚未就绪。'); return; }
     if (!codes.length) { notice('没有可导出的码。'); return; }
     notice(`正在生成 ${codes.length} 个码图片与清单…`);
@@ -497,7 +530,7 @@
       try {
         const blob = await ui.codeImage(c.id);
         files.push({ name: `${c.id}.png`, data: blob });
-      } catch (_) { /* 单个失败继续 */ }
+      } catch (error) { notice('码图片生成失败：'+c.id+'；未生成不完整ZIP');return; }
     }
     files.push({ name: '码清单.csv', data: '\uFEFF' + buildCSV(codes) });
     files.push({ name: '说明.txt', data: '本文件内的码图片仅用于演示编号，不是微信小程序码；无真实结算与微信码接口。\n' });
@@ -525,38 +558,36 @@
     } catch (_) { notice('浏览器不支持下载。'); }
   }
   function importCSV(text) {
-    text = String(text || '').replace(/^\uFEFF/, '');
-    const rows = parseCSV(text);
-    if (rows.length < 2) { notice('CSV 没有数据行。'); return; }
-    const header = rows[0].map(s => String(s).trim());
-    const idx = key => header.indexOf(key);
-    if (idx('独立码ID') < 0 || idx('分发人') < 0) return notice('CSV须包含独立码ID和分发人列，请使用登记模板。');
-    let matched = 0;
-    const unknown = [];
-    for (const row of rows.slice(1)) {
-      const get = key => { const i = idx(key); return i >= 0 ? String(row[i] ?? '').trim() : ''; };
-      const id = get('独立码ID');
-      if (!id) continue;
-      const code = codeById(id);
-      if (!code) { unknown.push(id); continue; }
-      const person = get('分发人') || code.distributor;
-      const orderId = get('订单依据').replace(/^order:/,'') || code.orderId.replace(/^order:/,'');
-      const order = orderId ? W.PrototypeUI?.recordValues('order','order:'+orderId) : null;
-      if (orderId && (!person || !order || order['支付'] !== '已付款' || store.codes.some(x=>x.id!==id && String(x.orderId).replace(/^order:/,'')===orderId))) { unknown.push(id+'（订单无效、重复归属或缺分发人）'); continue; }
-      code.distributor = person;
-      code.orderId = orderId;
-      code.status = orderId ? '已登记订单' : person ? '已分发' : '已生成';
-      if (get('备注')) code.note = get('备注');
-      // 成交金额来自只读订单；比例保留创建时值，不从CSV覆盖。
-      matched += 1;
-    }
-    save(); logOp('推广码导入', 'promo-csv', `更新${matched}·未匹配${unknown.length}`);
-    notice(`导入完成：更新 ${matched} 个码${unknown.length ? `，${unknown.length} 个ID未匹配` : ''}。`);
-    rerender();
+    if(!canUse())return;
+    let rows;try{rows=parseCSV(String(text||'').replace(/^\uFEFF/,''));}catch(err){notice(err.message);return;}
+    if(rows.length<2)return notice('CSV没有数据行');
+    const head=rows[0].map(x=>String(x).trim()),idx=k=>head.indexOf(k);
+    if(idx('独立码ID')<0||idx('分发人')<0)return notice('CSV须包含独立码ID和分发人列，请使用登记模板。');
+    if(new Set(head).size!==head.length)return notice('CSV表头重复，请检查后重新导入');
+    const valid=[],bad=[],seen=new Map(),claimed=new Set();
+    rows.slice(1).forEach(row=>{const id=String(row[idx('独立码ID')]||'').trim();seen.set(id,(seen.get(id)||0)+1);});
+    rows.slice(1).forEach((row,index)=>{
+      const get=k=>idx(k)<0?'':String(row[idx(k)]||'').trim(),id=get('独立码ID'),code=codeById(id),errors=[];
+      if(row.length!==head.length)errors.push('列数与表头不一致');
+      if(!id)errors.push('缺少独立码ID');else if(!code)errors.push('独立码ID不存在');
+      if(seen.get(id)>1)errors.push('CSV内重复码ID');
+      const person=get('分发人')||code?.distributor||'',phone=get('分发人电话')||code?.distributorPhone||'',note=get('备注')||code?.note||'',orderId=(get('订单依据')||code?.orderId||'').replace(/^order:/,'');
+      if(person.length>40)errors.push('分发人最多40字');if(phone.length>30)errors.push('联系电话最多30字');if(note.length>120)errors.push('备注最多120字');
+      if(get('状态')&&!STATUS.includes(get('状态')))errors.push('状态不在已有枚举中');
+      if(orderId){const order=W.PrototypeUI.recordValues('order','order:'+orderId);if(!person)errors.push('有关联订单时须提供分发人');if(!order||order['支付']!=='已付款')errors.push('订单不存在或未付款');if(claimed.has(orderId)||store.codes.some(x=>x.id!==id&&String(x.orderId).replace(/^order:/,'')===orderId))errors.push('订单已归属其他码');}
+      const item={line:index+2,id,raw:row.join(' | ')};
+      if(errors.length)bad.push({...item,reason:errors.join('；')});else{if(orderId)claimed.add(orderId);valid.push({...item,before:JSON.stringify(code),patch:{distributor:person,distributorPhone:phone,note,orderId,status:orderId?'已登记订单':person?'已分发':'已生成'}});}
+    });
+    const errorRows=bad.map(x=>'<tr><td>'+x.line+'</td><td>'+esc(x.id)+'</td><td>'+esc(x.reason)+'</td></tr>').join('');
+    const root=openDialog('CSV导入预检','<p id="dp-import-count">有效 '+valid.length+' 行，错误 '+bad.length+' 行；尚未应用。</p><p class="dp-muted">金额、比例及首绑归属始终只读，不接受CSV覆盖。状态由分发人/订单依据推导；空值保留原值。确认仅应用有效行。</p>'+tableHTML(['有效行号','码ID','将保存的登记'],valid.map(x=>'<tr><td>'+x.line+'</td><td>'+esc(x.id)+'</td><td>'+esc(x.patch.distributor+' / '+x.patch.distributorPhone+' / '+x.patch.status)+'</td></tr>').join(''))+tableHTML(['错误行号','码ID','原因'],errorRows),'<button class="btn btn-outline" data-dp-cancel>取消</button><button class="btn btn-outline" id="dp-errors-download" '+(bad.length?'':'disabled')+'>下载错误行CSV</button><button class="btn btn-primary" id="dp-import-apply" '+(valid.length?'':'disabled')+'>确认应用有效行</button>');
+    root.querySelector('[data-dp-cancel]').onclick=closeDialog;
+    root.querySelector('#dp-errors-download').onclick=()=>downloadText('promo-错误行.csv',[['行号','码ID','原因','原始数据'],...bad.map(x=>[x.line,x.id,x.reason,x.raw])].map(row=>row.map(csvCell).join(',')).join('\r\n'));
+    root.querySelector('#dp-import-apply').onclick=()=>{if(!canUse())return;if(valid.some(x=>JSON.stringify(codeById(x.id))!==x.before))return notice('预检后资料发生变化，请重新导入核对');for(const x of valid)Object.assign(codeById(x.id),x.patch);save();logOp('推广码导入','promo-csv','确认更新'+valid.length+'行，错误'+bad.length+'行未应用');closeDialog();rerender();notice('已应用'+valid.length+'个码登记，错误行未应用');};
   }
 
   /* ---------- 动作分发 ---------- */
   function runAction(action, id, button) {
+    if(!canUse())return true;
     switch (action) {
       case 'save': save(); notice('当前页面已保存，返回后可重开；刷新恢复样例。'); return true;
       case 'ch-add': openChannelForm(); return true;
@@ -590,6 +621,9 @@
         exportZip(list); return true;
       }
       case 'order-view': closeDialog();navigate('order');W.AdminDemoBusiness.orderDetail(id.startsWith('order:')?id:'order:'+id);return true;
+      case 'bind-view': bindingDetails(id);return true;
+      case 'scan-demo': scanDemo();return true;
+      case 'code-csv': {const list=filteredCodes();if(!list.length)return notice('没有符合条件的码');downloadText('promo-当前筛选.csv',buildCSV(list));logOp('推广筛选CSV','promo-csv',list.length+'码');return true;}
       case 'code-edit': openCodeForm(id); return true;
       case 'code-zip': exportZip(filteredCodes()); return true;
       case 'filter-apply': rerender(); return true;
@@ -600,7 +634,7 @@
         downloadText('promo-登记模板.csv', sample); logOp('推广码模板下载', 'promo-csv-template', '');
         notice('登记模板已下载。'); return true;
       }
-      case 'io-export': downloadText('promo-码清单.csv', buildCSV(store.codes)); logOp('推广码清单导出', 'promo-csv', `${store.codes.length}码`); notice('当前码清单 CSV 已下载。'); return true;
+      case 'io-export': downloadText('promo-码清单.csv', buildCSV(filteredCodes())); logOp('推广码清单导出', 'promo-csv', `${filteredCodes().length}码`); notice('当前码清单 CSV 已下载。'); return true;
       default: return false;
     }
   }
@@ -656,6 +690,6 @@
   }
 
   E.register({ renderPage, bindPage, handleAction },true);
-  W.AdminDemoPromo={get records(){return JSON.parse(JSON.stringify(store));}};
+  W.AdminDemoPromo={get records(){return JSON.parse(JSON.stringify(store));},memberAttribution,captureScan,attributedAmount,buildCSV,bindingDetails};
   try { W.AdminDemoData?.ensure?.(); } catch (_) { /* 演示推广闭环不依赖共享主数据 */ }
 })();

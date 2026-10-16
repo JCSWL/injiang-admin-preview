@@ -30,6 +30,32 @@
     schema[key].groups=groups.map(([title,labels])=>({title,fields:labels.map(label=>all.find(f=>f.label===label)).filter(Boolean)}));
   }
   const safe = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function comparable(field,value) {
+    if(value==null||value==='')return '';
+    if(/数字|整数/.test(field.type||'')){const n=Number(value);if(Number.isFinite(n))return n;}
+    if(field.type==='开关')return typeof value==='boolean'?(value?'开启':'关闭'):value;
+    if(/日期/.test(field.type||''))return String(value).replace('T',' ');
+    if(Array.isArray(value))return value.map(v=>comparable({},v));
+    if(typeof value==='object')return Object.fromEntries(Object.keys(value).sort().map(k=>[k,comparable({},value[k])]));
+    return String(value).replace(/\r\n/g,'\n');
+  }
+  function changeSummary(state,values) {
+    const changes=[];
+    const describe=(field,value)=>{
+      if(/密钥|API.?Key|密码|身份证|实名材料|证书|收货地址/i.test(field.label))return value?'已设置（内容隐藏）':'未设置';
+      if(value==null||value==='')return '未填写';
+      let text=Array.isArray(value)?value.map(v=>typeof v==='object'?JSON.stringify(v):AdminRelations.label(v)||String(v)).join('、'):typeof value==='object'?JSON.stringify(value):String(value);
+      if(/^(blob:|data:image)/.test(text))text='会话图片';
+      return text.length>100?text.slice(0,100)+'…':text;
+    };
+    for(const field of state.fields||[]){
+      if(field.readonly)continue;
+      const old=state.values?.[field.label],next=values[field.label];
+      if(JSON.stringify(comparable(field,old))===JSON.stringify(comparable(field,next)))continue;
+      changes.push(`${field.label}：${describe(field,old)} → ${describe(field,next)}`);
+    }
+    return changes.join('；')||(state.creating?'新增资料（具体字段未变）':'无字段变化（保存）');
+  }
   const close = () => {
     document.querySelector('.ux-popover')?.remove();
     const modal=!!document.querySelector('.ux-dialog');
@@ -105,7 +131,7 @@
         if (['图片','文件','图标'].some(t => f.type?.includes(t))) val = '';
       }
       if(key==='member' && f.label==='昵称 / 头像 / 手机号' && obj) val=`${obj.nick} / ${obj.avatar} / 未提供手机号`;
-      if(key==='member' && f.label==='会员编号' && obj) val=obj.id;
+      if(key==='member' && f.label==='会员编号' && obj) val='IJ-'+Number(String(obj.id).replace(/^U/, '')).toString(36).toUpperCase().padStart(6,'0');
       if(key==='activity' && f.label==='成人价' && obj) val=obj.price;
       if(key==='activity' && f.label==='是否付费' && obj) val=obj.paid?'付费':'免费';
       if(key==='checkin_rules') val=({'评价推送延迟':3,'评价确认有效期':24,'每人每店日限打卡次数':1})[f.label];
@@ -396,6 +422,7 @@
       window.AdminRelations?.register(state.page,id,values);
       window.AdminRelations?.commit?.(id,values);
     }
+    const savedChanges=changeSummary(state,values);
     drafts.set(state.identity, values);
     if(state.key.startsWith('home_') || state.key.startsWith('promo_'))window.AdminRelations?.commit?.(`${state.key}:config`,values);
     if (state.row && state.key === state.page && !state.creating) {
@@ -409,7 +436,7 @@
     }
     window.AdminExtensions?.afterSave(state,values);
     window.AdminExtensions?.recordChanged(state.key,state.row?.dataset.uxId||state.identity,state.values,values,'保存');
-    recordOperation(state.creating?'新增资料':'保存资料',state.row?.dataset.uxId||state.identity,'资料已保存');
+    recordOperation(state.creating?'新增资料':'保存资料',state.row?.dataset.uxId||state.identity,savedChanges);
     close();
     if(state.creating && state.key==='coupon')navigate(state.page);
     notice(state.creating?'新增成功':'保存成功');
@@ -477,10 +504,40 @@
     '处理':'暂无可查看的处理记录。'
   };
   function exportPreview() {
-    const tables = [...$('page').querySelectorAll('table')];
-    const lines = tables.map(t => [...t.rows].filter(r=>!r.hidden).map(r=>[...r.cells].filter(c=>getComputedStyle(c).display!=='none' && !c.classList.contains('row-acts')).map(c=>c.innerText.trim()).join(' | ')).join('\n')).join('\n\n');
-    const content = lines || $('page').innerText;
-    drawer('导出预览', `<pre class="prototype-export">${safe(content)}</pre>`);
+    if(ROLE==='boss')return notice('管理层只下载经营汇总，请使用汇总CSV');
+    if(!ROLE_MENU[ROLE]?.includes(ui.page))return;
+    const table=[...$('page').querySelectorAll('table')].find(t=>t.getClientRects().length);
+    if(!table)return notice('当前没有可导出的列表');
+    const visible=[...table.querySelectorAll('tbody tr')].filter(r=>!r.hidden&&getComputedStyle(r).display!=='none');
+    const selected=visible.filter(r=>r.querySelector('input[type=checkbox]')?.checked),rows=selected.length?selected:visible;
+    if(!rows.length)return notice('没有匹配记录，未生成CSV');
+    const stringify=v=>v==null?'':typeof v==='object'?JSON.stringify(v):String(v);
+    const scrub=(label,v)=>label==='收货地址'?(v?'****（地址已脱敏）':''):stringify(v);
+    const fields=ui.page==='order'?['订单号','类型','下单时间','支付时间','会员ID','买家','买家电话','关联对象ID','关联对象','规格','数量','使用日期','订单原价','优惠券抵扣','金额','使用优惠券','支付','履约','物流公司','物流单号','收货人','收货电话','收货信息','售后','售后类型','售后原因','售后备注','联系状态','用户备注','运营内部备注']:[...new Set(flatFields(ui.page).filter(f=>!/密钥|API.?Key|密码|身份证|实名材料|证书/i.test(f.label)).map(f=>f.label))];
+    const map=new Map(records(ui.page).map(r=>[r.id,r.values]));
+    let heads,data;
+    if(fields.length&&rows.every(r=>map.has(r.dataset.uxId))){
+      heads=[ui.page==='order'?'订单ID':'资料ID',...fields];
+      if(ui.page==='order')heads.push('关联向导ID','关联合作方ID');
+      data=rows.map(row=>{
+        const v=map.get(row.dataset.uxId),cells=[row.dataset.uxId,...fields.map(k=>scrub(k,v[k]))];
+        if(ui.page==='order'){
+          const target=v['关联对象ID'];const a=target?.startsWith('activity:')?recordValues('activity',target):null;
+          cells.push(a?.['类型']==='向导带队'?a['关联向导']||'':'',a?.['类型']==='外部合作旅行团'?a['关联合作方']||'':'');
+        }
+        return cells;
+      });
+    }else{
+      const headers=[...table.querySelectorAll('thead tr:first-child th')];
+      const indexes=headers.map((h,i)=>({h,i})).filter(({h})=>h.textContent.trim()&&h.textContent.trim()!=='操作'&&!h.hidden&&getComputedStyle(h).display!=='none');
+      heads=indexes.map(({h})=>h.textContent.trim());data=rows.map(r=>indexes.map(({i})=>r.cells[i]?.dataset.listValue??r.cells[i]?.innerText.trim()??''));
+    }
+    const cell=v=>{let text=stringify(v);if(/^[\s\uFEFF]*[=+@-]/.test(text))text="'"+text;return '"'+text.replace(/"/g,'""')+'"';};
+    const content='\uFEFF'+[heads,...data].map(r=>r.map(cell).join(',')).join('\r\n');
+    const name=`${pageName(ui.page)}_${selected.length?'已勾选':'当前筛选'}.csv`;
+    if(window.AdminDemoUI)AdminDemoUI.download(name,content);else{const url=URL.createObjectURL(new Blob([content],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);}
+    recordOperation('列表导出',ui.page,`${selected.length?'已勾选':'当前筛选'} ${data.length} 条；不含密钥或实名材料`);
+    notice(`已导出${data.length}条记录（${selected.length?'已勾选':'当前筛选'}）`);
   }
   const stateLogs=[];
   function statusContext(row,key=ui.page,extra={}) {

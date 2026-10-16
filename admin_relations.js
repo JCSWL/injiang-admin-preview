@@ -210,7 +210,7 @@
     if (/^home_/.test(key) && name==='向导名片')return spec(['guide'],true,{ordered:true});
     if (/^home_/.test(key) && name==='推荐路线')return spec(['guide_routes'],true,{ordered:true});
     if (name === '挂载活动') return spec(['activity'], true);
-    if (name === '挂载商品') return spec(['shop'], true);
+    if (name === '挂载商品') return spec(['shop'], true, {ordered:key==='shop_featured'});
     if (name === '关联优惠券') return spec(['coupon'], false, {newcomer: true});
     if (name === '关联向导') return spec(['guide']);
     if (name === '关联合作方') return spec(['guide'], false, {partner: true});
